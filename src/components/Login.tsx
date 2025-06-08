@@ -2,16 +2,15 @@ import React, { useState } from 'react';
 import {
   Container,
   Box,
+  Typography,
   TextField,
   Button,
-  Typography,
   Paper,
-  Alert,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 
 interface LoginProps {
-  onLogin: (accessCode: string) => void;
+  onLogin: (code: string) => void;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
@@ -29,20 +28,18 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     // Here we'll validate the access code
     // For now, we'll accept any non-empty code
     // In a real application, you would validate against a backend
-    onLogin(accessCode);
+    onLogin(accessCode.trim());
     navigate('/');
   };
 
   return (
-    <Container maxWidth="sm">
+    <Container maxWidth="sm" sx={{ height: '100vh' }}>
       <Box
         sx={{
-          minHeight: '100vh',
+          height: '100%',
           display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
           alignItems: 'center',
-          py: 4,
+          justifyContent: 'center',
         }}
       >
         <Paper

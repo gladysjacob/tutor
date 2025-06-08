@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -11,7 +11,6 @@ import {
   Checkbox,
   Button,
   Paper,
-  Divider,
   IconButton,
   Link,
 } from '@mui/material';
