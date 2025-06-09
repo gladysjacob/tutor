@@ -15,10 +15,7 @@ async function getPool() {
       connectionString: process.env.NETLIFY_DATABASE_URL,
       ssl: {
         rejectUnauthorized: false
-      },
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
+      }
     });
   }
   return pool;
@@ -26,36 +23,30 @@ async function getPool() {
 
 // Initialize database tables
 async function initializeDatabase() {
+  const pool = await getPool();
   try {
     console.log('Starting database initialization...');
-    const pool = await getPool();
     
-    // Drop existing tables if they exist
+    // Create tables if they don't exist
     await pool.query(`
-      DROP TABLE IF EXISTS progress;
-      DROP TABLE IF EXISTS users;
-    `);
-    
-    // Create tables in correct order
-    await pool.query(`
-      CREATE TABLE users (
+      CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         role VARCHAR(50) NOT NULL DEFAULT 'student',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
+      )
     `);
 
     await pool.query(`
-      CREATE TABLE progress (
+      CREATE TABLE IF NOT EXISTS progress (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
         week_id INTEGER NOT NULL,
         data JSONB NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(user_id, week_id)
-      );
+      )
     `);
 
     // Check if teacher account exists, if not create it
@@ -69,9 +60,10 @@ async function initializeDatabase() {
         'INSERT INTO users (name, email, role) VALUES ($1, $2, $3)',
         ['Teacher', 'TEACHER-2024', 'teacher']
       );
+      console.log('Teacher account created');
     }
 
-    console.log('Database tables initialized');
+    console.log('Database initialization complete');
   } catch (err) {
     console.error('Error initializing database:', err);
     throw err;
@@ -107,17 +99,29 @@ exports.handler = async (event, context) => {
     };
   }
 
+  let requestData;
   try {
-    const { path, method, body } = parseRequest(event);
+    requestData = parseRequest(event);
+  } catch (error) {
+    console.error('Error parsing request:', error);
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ error: 'Invalid request format' })
+    };
+  }
+
+  const { path, method, body } = requestData;
+
+  try {
     const pool = await getPool();
 
     // Login endpoint
     if (path === '/login' && method === 'POST') {
       const { code } = body;
-      
       console.log('Login attempt with code:', code);
-      
-      // First just check if the user exists
+
+      // Simple query to get user
       const userResult = await pool.query(
         'SELECT * FROM users WHERE email = $1',
         [code.toLowerCase()]
@@ -132,9 +136,9 @@ exports.handler = async (event, context) => {
       }
 
       const user = userResult.rows[0];
-      
-      // If it's a student, get their progress
       let progress = [];
+
+      // If student, get their progress
       if (user.role === 'student') {
         const progressResult = await pool.query(
           'SELECT data FROM progress WHERE user_id = $1 ORDER BY week_id',
@@ -249,8 +253,8 @@ exports.handler = async (event, context) => {
     if (path.match(/^\/students\/[^/]+$/) && method === 'DELETE') {
       const email = path.split('/')[2];
       const result = await pool.query(
-        'DELETE FROM users WHERE email = $1',
-        [email.toLowerCase()]
+        'DELETE FROM users WHERE email = $1 AND role = $2 RETURNING *',
+        [email.toLowerCase(), 'student']
       );
 
       if (result.rowCount === 0) {
@@ -278,13 +282,15 @@ exports.handler = async (event, context) => {
     console.error('Error details:', {
       message: error.message,
       code: error.code,
-      stack: error.stack
+      stack: error.stack,
+      path,
+      method
     });
-    
+
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         error: 'Server error',
         details: error.message,
         code: error.code
