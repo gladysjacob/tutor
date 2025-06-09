@@ -1,6 +1,7 @@
 const { Pool } = require('pg');
 
 let pool;
+let isInitialized = false;
 
 async function getPool() {
   if (!pool) {
@@ -23,6 +24,10 @@ async function getPool() {
 
 // Initialize database tables
 async function initializeDatabase() {
+  if (isInitialized) {
+    return;
+  }
+
   const pool = await getPool();
   try {
     console.log('Starting database initialization...');
@@ -38,6 +43,8 @@ async function initializeDatabase() {
       )
     `);
 
+    console.log('Users table created');
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS progress (
         id SERIAL PRIMARY KEY,
@@ -48,6 +55,8 @@ async function initializeDatabase() {
         UNIQUE(user_id, week_id)
       )
     `);
+
+    console.log('Progress table created');
 
     // Check if teacher account exists, if not create it
     const teacherResult = await pool.query(
@@ -64,14 +73,12 @@ async function initializeDatabase() {
     }
 
     console.log('Database initialization complete');
+    isInitialized = true;
   } catch (err) {
     console.error('Error initializing database:', err);
     throw err;
   }
 }
-
-// Initialize database on cold start
-initializeDatabase().catch(console.error);
 
 // Helper function to parse path and method from event
 function parseRequest(event) {
@@ -96,6 +103,21 @@ exports.handler = async (event, context) => {
     return {
       statusCode: 204,
       headers
+    };
+  }
+
+  // Ensure database is initialized before processing any request
+  try {
+    await initializeDatabase();
+  } catch (error) {
+    console.error('Failed to initialize database:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        error: 'Database initialization failed',
+        details: error.message
+      })
     };
   }
 
