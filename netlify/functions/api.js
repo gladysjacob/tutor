@@ -62,15 +62,9 @@ async function initializeDatabase() {
   try {
     console.log('Starting database initialization...');
     
-    // Drop and recreate tables
-    await pool.query('DROP TABLE IF EXISTS progress CASCADE');
-    await pool.query('DROP TABLE IF EXISTS users CASCADE');
-    
-    console.log('Dropped existing tables');
-
-    // Create tables
+    // Create tables if they don't exist
     await pool.query(`
-      CREATE TABLE users (
+      CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
@@ -79,10 +73,10 @@ async function initializeDatabase() {
       )
     `);
 
-    console.log('Users table created');
+    console.log('Users table verified');
 
     await pool.query(`
-      CREATE TABLE progress (
+      CREATE TABLE IF NOT EXISTS progress (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
         week_id INTEGER NOT NULL,
@@ -92,23 +86,26 @@ async function initializeDatabase() {
       )
     `);
 
-    console.log('Progress table created');
+    console.log('Progress table verified');
 
-    // Force create teacher account
-    try {
-      const insertResult = await pool.query(
-        'INSERT INTO users (name, email, role) VALUES ($1, $2, $3) RETURNING *',
-        ['Teacher', 'TEACHER-2024', 'teacher']
-      );
-      console.log('Teacher account created:', insertResult.rows[0]);
-    } catch (err) {
-      console.error('Failed to create teacher account:', err);
-      throw err;
+    // Check if teacher account exists
+    const teacherResult = await pool.query('SELECT * FROM users WHERE role = $1', ['teacher']);
+    
+    // Only create teacher account if it doesn't exist
+    if (teacherResult.rows.length === 0) {
+      try {
+        const insertResult = await pool.query(
+          'INSERT INTO users (name, email, role) VALUES ($1, $2, $3) RETURNING *',
+          ['Teacher', 'TEACHER-2024', 'teacher']
+        );
+        console.log('Teacher account created:', insertResult.rows[0]);
+      } catch (err) {
+        console.error('Failed to create teacher account:', err);
+        throw err;
+      }
+    } else {
+      console.log('Teacher account already exists');
     }
-
-    // Verify teacher account exists
-    const verifyResult = await pool.query('SELECT * FROM users WHERE role = $1', ['teacher']);
-    console.log('Teacher accounts in database:', verifyResult.rows);
 
     // Verify database state
     await verifyDatabaseState();
