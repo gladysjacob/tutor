@@ -12,22 +12,37 @@ const pool = new Pool({
 async function initializeDatabase() {
   try {
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS students (
+      CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
+        role VARCHAR(50) NOT NULL DEFAULT 'student',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
       CREATE TABLE IF NOT EXISTS progress (
         id SERIAL PRIMARY KEY,
-        student_id INTEGER REFERENCES students(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
         week_id INTEGER NOT NULL,
         data JSONB NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(student_id, week_id)
+        UNIQUE(user_id, week_id)
       );
     `);
+
+    // Check if teacher account exists, if not create it
+    const teacherResult = await pool.query(
+      'SELECT * FROM users WHERE email = $1',
+      ['TEACHER-2024']
+    );
+
+    if (teacherResult.rows.length === 0) {
+      await pool.query(
+        'INSERT INTO users (name, email, role) VALUES ($1, $2, $3)',
+        ['Teacher', 'TEACHER-2024', 'teacher']
+      );
+    }
+
     console.log('Database tables initialized');
   } catch (err) {
     console.error('Error initializing database:', err);
@@ -69,22 +84,14 @@ exports.handler = async (event, context) => {
     if (path === '/login' && method === 'POST') {
       const { code } = body;
 
-      // Check for teacher access code
-      if (code === 'TEACHER-2024') {
-        return {
-          statusCode: 200,
-          headers,
-          body: JSON.stringify({
-            isTeacher: true,
-            name: 'Teacher',
-            email: code
-          })
-        };
-      }
-
-      // Student login
+      // Check for any user (teacher or student) with this email
       const result = await pool.query(
-        'SELECT s.*, json_agg(p.data) as progress FROM students s LEFT JOIN progress p ON s.id = p.student_id WHERE s.email = $1 GROUP BY s.id',
+        `SELECT u.*, 
+                json_agg(p.data) FILTER (WHERE p.data IS NOT NULL) as progress 
+         FROM users u 
+         LEFT JOIN progress p ON u.id = p.user_id 
+         WHERE u.email = $1 
+         GROUP BY u.id`,
         [code.toLowerCase()]
       );
 
@@ -92,19 +99,19 @@ exports.handler = async (event, context) => {
         return {
           statusCode: 401,
           headers,
-          body: JSON.stringify({ error: 'Invalid email or unregistered student' })
+          body: JSON.stringify({ error: 'Invalid email or unregistered user' })
         };
       }
 
-      const student = result.rows[0];
+      const user = result.rows[0];
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({
-          isTeacher: false,
-          name: student.name,
-          email: student.email,
-          progress: student.progress || []
+          isTeacher: user.role === 'teacher',
+          name: user.name,
+          email: user.email,
+          progress: user.progress || []
         })
       };
     }
@@ -114,8 +121,8 @@ exports.handler = async (event, context) => {
       const { name, email } = body;
       try {
         const result = await pool.query(
-          'INSERT INTO students (name, email) VALUES ($1, $2) RETURNING *',
-          [name, email.toLowerCase()]
+          'INSERT INTO users (name, email, role) VALUES ($1, $2, $3) RETURNING *',
+          [name, email.toLowerCase(), 'student']
         );
         return {
           statusCode: 201,
@@ -137,7 +144,8 @@ exports.handler = async (event, context) => {
     // Get all students endpoint
     if (path === '/students' && method === 'GET') {
       const result = await pool.query(
-        'SELECT name, email, created_at as "registeredAt" FROM students ORDER BY created_at DESC'
+        'SELECT name, email, created_at as "registeredAt" FROM users WHERE role = $1 ORDER BY created_at DESC',
+        ['student']
       );
       return {
         statusCode: 200,
@@ -155,33 +163,33 @@ exports.handler = async (event, context) => {
       try {
         await client.query('BEGIN');
 
-        const studentResult = await client.query(
-          'SELECT id FROM students WHERE email = $1',
+        const userResult = await client.query(
+          'SELECT id FROM users WHERE email = $1',
           [email.toLowerCase()]
         );
 
-        if (studentResult.rows.length === 0) {
+        if (userResult.rows.length === 0) {
           await client.query('ROLLBACK');
           return {
             statusCode: 404,
             headers,
-            body: JSON.stringify({ error: 'Student not found' })
+            body: JSON.stringify({ error: 'User not found' })
           };
         }
 
-        const studentId = studentResult.rows[0].id;
+        const userId = userResult.rows[0].id;
 
         await client.query(
-          `INSERT INTO progress (student_id, week_id, data)
+          `INSERT INTO progress (user_id, week_id, data)
            VALUES ($1, $2, $3)
-           ON CONFLICT (student_id, week_id)
+           ON CONFLICT (user_id, week_id)
            DO UPDATE SET data = $3`,
-          [studentId, weekId, updatedWeek]
+          [userId, weekId, updatedWeek]
         );
 
         const progressResult = await client.query(
-          'SELECT data FROM progress WHERE student_id = $1 ORDER BY week_id',
-          [studentId]
+          'SELECT data FROM progress WHERE user_id = $1 ORDER BY week_id',
+          [userId]
         );
 
         await client.query('COMMIT');
@@ -202,7 +210,7 @@ exports.handler = async (event, context) => {
     if (path.match(/^\/students\/[^/]+$/) && method === 'DELETE') {
       const email = path.split('/')[2];
       const result = await pool.query(
-        'DELETE FROM students WHERE email = $1',
+        'DELETE FROM users WHERE email = $1',
         [email.toLowerCase()]
       );
 

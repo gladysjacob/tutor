@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import { Week } from '../types/curriculum';
 import { api } from '../services/api';
 
@@ -23,26 +23,10 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [accessCode, setAccessCode] = useState<string | null>(() => {
-    const saved = localStorage.getItem('accessCode');
-    return saved || null;
-  });
-
-  const [studentName, setStudentName] = useState<string | null>(() => {
-    const saved = localStorage.getItem('studentName');
-    return saved || null;
-  });
-
-  const [isTeacher, setIsTeacher] = useState<boolean>(() => {
-    const saved = localStorage.getItem('isTeacher');
-    return saved === 'true';
-  });
-
-  const [userProgress, setUserProgress] = useState<Week[]>(() => {
-    if (!accessCode) return [];
-    const saved = localStorage.getItem(`progress_${accessCode}`);
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [accessCode, setAccessCode] = useState<string | null>(null);
+  const [studentName, setStudentName] = useState<string | null>(null);
+  const [isTeacher, setIsTeacher] = useState<boolean>(false);
+  const [userProgress, setUserProgress] = useState<Week[]>([]);
 
   const login = async (code: string): Promise<boolean> => {
     try {
@@ -52,13 +36,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setStudentName(response.name);
       setIsTeacher(response.isTeacher);
       
-      localStorage.setItem('accessCode', response.email);
-      localStorage.setItem('studentName', response.name);
-      localStorage.setItem('isTeacher', response.isTeacher.toString());
-
       if (!response.isTeacher && response.progress) {
         setUserProgress(response.progress);
-        localStorage.setItem(`progress_${response.email}`, JSON.stringify(response.progress));
       }
 
       return true;
@@ -73,9 +52,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setStudentName(null);
     setIsTeacher(false);
     setUserProgress([]);
-    localStorage.removeItem('accessCode');
-    localStorage.removeItem('studentName');
-    localStorage.removeItem('isTeacher');
   };
 
   const updateProgress = async (weekId: number, updatedWeek: Week) => {
@@ -84,7 +60,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const updatedProgress = await api.updateProgress(accessCode, weekId, updatedWeek);
       setUserProgress(updatedProgress);
-      localStorage.setItem(`progress_${accessCode}`, JSON.stringify(updatedProgress));
     } catch (error) {
       console.error('Failed to update progress:', error);
     }
