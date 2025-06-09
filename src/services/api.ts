@@ -1,22 +1,30 @@
 // Determine the API URL based on the environment
-const API_URL = 'https://algebratutor.onrender.com/api';  // Replace with your actual deployed backend URL
+const API_URL = '/.netlify/functions/api';  // Using Netlify Functions
 
 export const api = {
   login: async (code: string) => {
-    const response = await fetch(`${API_URL}/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ code }),
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Login failed');
+    try {
+      const response = await fetch(`${API_URL}/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ code }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: `HTTP error! status: ${response.status}` }));
+        throw new Error(error.error || 'Login failed');
+      }
+      
+      return response.json();
+    } catch (error) {
+      console.error('Login error:', error);
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        throw new Error('Unable to connect to the server. Please check your internet connection or try again later.');
+      }
+      throw error;
     }
-    
-    return response.json();
   },
 
   registerStudent: async (name: string, email: string) => {
