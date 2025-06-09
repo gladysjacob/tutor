@@ -186,8 +186,8 @@ exports.handler = async (event, context) => {
       console.log('Login attempt with code:', code);
 
       // Debug: Show exact SQL being executed
-      const sql = 'SELECT * FROM users WHERE email = $1';
-      const values = [code.toLowerCase()];
+      const sql = 'SELECT * FROM users WHERE LOWER(email) = LOWER($1)';
+      const values = [code];
       console.log('Executing SQL:', { sql, values });
 
       // Query for user
@@ -196,7 +196,7 @@ exports.handler = async (event, context) => {
       console.log('Login query result:', {
         found: userResult.rows.length > 0,
         rowCount: userResult.rowCount,
-        email: code.toLowerCase(),
+        email: code,
         user: userResult.rows[0] || null
       });
 
