@@ -50,6 +50,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const login = (code: string) => {
+    // Check if this is the teacher code
+    if (code === 'TEACHER-2024') {
+      setAccessCode(code);
+      setStudentName('Teacher');
+      localStorage.setItem('accessCode', code);
+      localStorage.setItem('studentName', 'Teacher');
+      return true;
+    }
+
     // Validate that the code is an email
     if (!validateEmail(code)) {
       return false;
@@ -66,6 +75,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const email = code.toLowerCase();
     setAccessCode(email);
     setStudentName(student.studentName);
+    localStorage.setItem('accessCode', email);
     localStorage.setItem('studentName', student.studentName);
 
     // Load existing progress for this student

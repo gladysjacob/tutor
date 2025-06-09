@@ -63,22 +63,21 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             Algebra 2 Tutoring
           </Typography>
           <Typography variant="body1" align="center" color="textSecondary" paragraph>
-            Enter your student email to access your curriculum progress
+            Enter your student email or teacher access code to continue
           </Typography>
 
           <form onSubmit={handleSubmit} style={{ width: '100%' }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <TextField
                 fullWidth
-                label="Student Email"
+                label="Email or Access Code"
                 variant="outlined"
-                type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 error={!!error}
                 helperText={error}
                 autoFocus
-                placeholder="Enter your email address"
+                placeholder="Enter your email or teacher access code"
               />
               <Button
                 type="submit"
