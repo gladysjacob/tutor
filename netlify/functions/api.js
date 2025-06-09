@@ -16,22 +16,10 @@ async function getPool() {
       ssl: {
         rejectUnauthorized: false
       },
-      // Add some connection pool settings
-      max: 20, // Maximum number of clients in the pool
-      idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-      connectionTimeoutMillis: 2000, // Return an error after 2 seconds if connection could not be established
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 2000,
     });
-
-    // Test the connection
-    try {
-      const client = await pool.connect();
-      console.log('Successfully connected to database');
-      client.release();
-    } catch (err) {
-      console.error('Failed to connect to database:', err);
-      pool = null;
-      throw err;
-    }
   }
   return pool;
 }
@@ -42,16 +30,25 @@ async function initializeDatabase() {
     console.log('Starting database initialization...');
     const pool = await getPool();
     
+    // Drop existing tables if they exist
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
+      DROP TABLE IF EXISTS progress;
+      DROP TABLE IF EXISTS users;
+    `);
+    
+    // Create tables in correct order
+    await pool.query(`
+      CREATE TABLE users (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         role VARCHAR(50) NOT NULL DEFAULT 'student',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+    `);
 
-      CREATE TABLE IF NOT EXISTS progress (
+    await pool.query(`
+      CREATE TABLE progress (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
         week_id INTEGER NOT NULL,
@@ -77,11 +74,12 @@ async function initializeDatabase() {
     console.log('Database tables initialized');
   } catch (err) {
     console.error('Error initializing database:', err);
+    throw err;
   }
 }
 
-// Initialize database tables when the function cold starts
-initializeDatabase();
+// Initialize database on cold start
+initializeDatabase().catch(console.error);
 
 // Helper function to parse path and method from event
 function parseRequest(event) {
@@ -97,7 +95,8 @@ exports.handler = async (event, context) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Content-Type': 'application/json'
   };
 
   // Handle preflight requests
@@ -109,8 +108,8 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    const pool = await getPool();
     const { path, method, body } = parseRequest(event);
+    const pool = await getPool();
 
     // Login endpoint
     if (path === '/login' && method === 'POST') {
@@ -118,50 +117,42 @@ exports.handler = async (event, context) => {
       
       console.log('Login attempt with code:', code);
       
-      try {
-        // Check for any user (teacher or student) with this email
-        const result = await pool.query(
-          `SELECT u.*, 
-                  json_agg(p.data) FILTER (WHERE p.data IS NOT NULL) as progress 
-           FROM users u 
-           LEFT JOIN progress p ON u.id = p.user_id 
-           WHERE u.email = $1 
-           GROUP BY u.id`,
-          [code.toLowerCase()]
-        );
+      // First just check if the user exists
+      const userResult = await pool.query(
+        'SELECT * FROM users WHERE email = $1',
+        [code.toLowerCase()]
+      );
 
-        console.log('Query result:', result.rows.length, 'rows found');
-
-        if (result.rows.length === 0) {
-          console.log('No user found for email:', code);
-          return {
-            statusCode: 401,
-            headers,
-            body: JSON.stringify({ error: 'Invalid email or unregistered user' })
-          };
-        }
-
-        const user = result.rows[0];
-        console.log('User found:', { role: user.role, name: user.name });
-        
+      if (userResult.rows.length === 0) {
         return {
-          statusCode: 200,
+          statusCode: 401,
           headers,
-          body: JSON.stringify({
-            isTeacher: user.role === 'teacher',
-            name: user.name,
-            email: user.email,
-            progress: user.progress || []
-          })
+          body: JSON.stringify({ error: 'Invalid email or unregistered user' })
         };
-      } catch (error) {
-        console.error('Login error details:', {
-          message: error.message,
-          code: error.code,
-          stack: error.stack
-        });
-        throw error;  // Re-throw to be caught by the main error handler
       }
+
+      const user = userResult.rows[0];
+      
+      // If it's a student, get their progress
+      let progress = [];
+      if (user.role === 'student') {
+        const progressResult = await pool.query(
+          'SELECT data FROM progress WHERE user_id = $1 ORDER BY week_id',
+          [user.id]
+        );
+        progress = progressResult.rows.map(row => row.data);
+      }
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          isTeacher: user.role === 'teacher',
+          name: user.name,
+          email: user.email,
+          progress
+        })
+      };
     }
 
     // Register student endpoint
@@ -287,10 +278,9 @@ exports.handler = async (event, context) => {
     console.error('Error details:', {
       message: error.message,
       code: error.code,
-      stack: error.stack,
-      path: path,
-      method: method
+      stack: error.stack
     });
+    
     return {
       statusCode: 500,
       headers,
