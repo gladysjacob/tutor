@@ -1,29 +1,46 @@
 const { Pool } = require('pg');
 
-console.log('Attempting to connect to database...');
-console.log('Database URL exists:', !!process.env.NETLIFY_DATABASE_URL);
+let pool;
 
-// Initialize the PostgreSQL connection pool
-const pool = new Pool({
-  connectionString: process.env.NETLIFY_DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
-});
+async function getPool() {
+  if (!pool) {
+    console.log('Creating new database pool...');
+    console.log('Database URL exists:', !!process.env.NETLIFY_DATABASE_URL);
+    
+    if (!process.env.NETLIFY_DATABASE_URL) {
+      throw new Error('Database URL not configured');
+    }
 
-// Test the connection immediately
-pool.query('SELECT NOW()', (err, res) => {
-  if (err) {
-    console.error('Database connection test failed:', err);
-  } else {
-    console.log('Database connection test successful');
+    pool = new Pool({
+      connectionString: process.env.NETLIFY_DATABASE_URL,
+      ssl: {
+        rejectUnauthorized: false
+      },
+      // Add some connection pool settings
+      max: 20, // Maximum number of clients in the pool
+      idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+      connectionTimeoutMillis: 2000, // Return an error after 2 seconds if connection could not be established
+    });
+
+    // Test the connection
+    try {
+      const client = await pool.connect();
+      console.log('Successfully connected to database');
+      client.release();
+    } catch (err) {
+      console.error('Failed to connect to database:', err);
+      pool = null;
+      throw err;
+    }
   }
-});
+  return pool;
+}
 
 // Initialize database tables
 async function initializeDatabase() {
   try {
     console.log('Starting database initialization...');
+    const pool = await getPool();
     
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -78,7 +95,7 @@ function parseRequest(event) {
 exports.handler = async (event, context) => {
   // Set CORS headers
   const headers = {
-    'Access-Control-Allow-Origin': 'https://algebratutor.netlify.app',
+    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
   };
@@ -92,6 +109,7 @@ exports.handler = async (event, context) => {
   }
 
   try {
+    const pool = await getPool();
     const { path, method, body } = parseRequest(event);
 
     // Login endpoint
