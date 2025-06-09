@@ -26,7 +26,7 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ teacherCode }) => {
   const navigate = useNavigate();
-  const { accessCode, logout, userProgress, updateProgress } = useAuth();
+  const { accessCode, logout, userProgress, updateProgress, studentName } = useAuth();
   const [hoveredWeek, setHoveredWeek] = useState<number | null>(null);
   const isTeacher = accessCode === teacherCode;
 
@@ -68,8 +68,13 @@ const Dashboard: React.FC<DashboardProps> = ({ teacherCode }) => {
           <Typography variant="h6" color="textSecondary">
             8-Week Comprehensive Program
           </Typography>
-          <Typography variant="subtitle1" color="primary">
-            Access Code: {accessCode}
+          {!isTeacher && (
+            <Typography variant="subtitle1" color="primary" gutterBottom>
+              Welcome, {studentName}!
+            </Typography>
+          )}
+          <Typography variant="subtitle1" color="textSecondary">
+            {isTeacher ? 'Teacher Account' : `Student Email: ${accessCode}`}
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 2 }}>

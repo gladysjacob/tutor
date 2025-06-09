@@ -21,11 +21,13 @@ import { useNavigate } from 'react-router-dom';
 interface GeneratedCode {
   code: string;
   studentName: string;
+  studentEmail: string;
   timestamp: number;
 }
 
 const CodeGenerator: React.FC = () => {
   const [studentName, setStudentName] = useState('');
+  const [studentEmail, setStudentEmail] = useState('');
   const [generatedCodes, setGeneratedCodes] = useState<GeneratedCode[]>(() => {
     const saved = localStorage.getItem('generatedCodes');
     return saved ? JSON.parse(saved) : [];
@@ -33,27 +35,45 @@ const CodeGenerator: React.FC = () => {
   const [snackbar, setSnackbar] = useState({ open: false, message: '' });
   const navigate = useNavigate();
 
+  const validateEmail = (email: string) => {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(email);
+  };
+
   const generateCode = () => {
     if (!studentName.trim()) {
       setSnackbar({ open: true, message: 'Please enter a student name' });
       return;
     }
 
-    // Generate a unique code based on student name and timestamp
-    const timestamp = Date.now();
-    const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    const code = `${studentName.substring(0, 3).toUpperCase()}-${randomNum}-${timestamp.toString().slice(-4)}`;
+    if (!studentEmail.trim()) {
+      setSnackbar({ open: true, message: 'Please enter a student email' });
+      return;
+    }
+
+    if (!validateEmail(studentEmail)) {
+      setSnackbar({ open: true, message: 'Please enter a valid email address' });
+      return;
+    }
+
+    // Check if email is already used
+    if (generatedCodes.some(code => code.code === studentEmail)) {
+      setSnackbar({ open: true, message: 'This email is already registered' });
+      return;
+    }
 
     const newCode: GeneratedCode = {
-      code,
+      code: studentEmail.toLowerCase(),
       studentName: studentName.trim(),
-      timestamp,
+      studentEmail: studentEmail.toLowerCase(),
+      timestamp: Date.now(),
     };
 
     const updatedCodes = [...generatedCodes, newCode];
     setGeneratedCodes(updatedCodes);
     localStorage.setItem('generatedCodes', JSON.stringify(updatedCodes));
     setStudentName('');
+    setStudentEmail('');
     setSnackbar({ open: true, message: 'Access code generated successfully' });
   };
 
@@ -76,43 +96,52 @@ const CodeGenerator: React.FC = () => {
           Back to Dashboard
         </Button>
         <Typography variant="h4" component="h1" gutterBottom>
-          Access Code Generator
+          Student Access Management
         </Typography>
         <Typography variant="body1" color="textSecondary" paragraph>
-          Generate unique access codes for your students
+          Register students using their email addresses as access codes
         </Typography>
       </Box>
 
       <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <TextField
             fullWidth
             label="Student Name"
             variant="outlined"
             value={studentName}
             onChange={(e) => setStudentName(e.target.value)}
-            placeholder="Enter student's name"
+            placeholder="Enter student's full name"
+          />
+          <TextField
+            fullWidth
+            label="Student Email"
+            variant="outlined"
+            type="email"
+            value={studentEmail}
+            onChange={(e) => setStudentEmail(e.target.value)}
+            placeholder="Enter student's email address"
           />
           <Button
             variant="contained"
             onClick={generateCode}
             sx={{ minWidth: '200px' }}
           >
-            Generate Code
+            Register Student
           </Button>
         </Box>
       </Paper>
 
       <Paper elevation={3} sx={{ p: 3 }}>
         <Typography variant="h6" gutterBottom>
-          Generated Access Codes
+          Registered Students
         </Typography>
         <List>
           {generatedCodes.length === 0 ? (
             <ListItem>
               <ListItemText
-                primary="No codes generated yet"
-                secondary="Generate your first code above"
+                primary="No students registered yet"
+                secondary="Register your first student above"
               />
             </ListItem>
           ) : (
@@ -144,11 +173,11 @@ const CodeGenerator: React.FC = () => {
                     secondary={
                       <>
                         <Typography component="span" variant="body2" color="text.primary">
-                          {item.code}
+                          {item.studentEmail}
                         </Typography>
                         <br />
                         <Typography component="span" variant="body2" color="text.secondary">
-                          Generated: {new Date(item.timestamp).toLocaleString()}
+                          Registered: {new Date(item.timestamp).toLocaleString()}
                         </Typography>
                       </>
                     }
@@ -162,12 +191,12 @@ const CodeGenerator: React.FC = () => {
 
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={3000}
+        autoHideDuration={6000}
         onClose={() => setSnackbar({ ...snackbar, open: false })}
       >
         <Alert
           onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity="success"
+          severity="info"
           sx={{ width: '100%' }}
         >
           {snackbar.message}

@@ -4,9 +4,10 @@ import { Week } from '../types/curriculum';
 interface AuthContextType {
   accessCode: string | null;
   userProgress: Week[];
-  login: (code: string) => void;
+  login: (code: string) => boolean;
   logout: () => void;
   updateProgress: (weekId: number, updatedWeek: Week) => void;
+  studentName: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -25,7 +26,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return saved || null;
   });
 
+  const [studentName, setStudentName] = useState<string | null>(() => {
+    const saved = localStorage.getItem('studentName');
+    return saved || null;
+  });
+
   const [userProgress, setUserProgress] = useState<Week[]>(() => {
+    if (!accessCode) return [];
     const saved = localStorage.getItem(`progress_${accessCode}`);
     return saved ? JSON.parse(saved) : [];
   });
@@ -37,18 +44,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [accessCode, userProgress]);
 
+  const validateEmail = (email: string) => {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(email);
+  };
+
   const login = (code: string) => {
-    setAccessCode(code);
-    const savedProgress = localStorage.getItem(`progress_${code}`);
+    // Validate that the code is an email
+    if (!validateEmail(code)) {
+      return false;
+    }
+
+    // Check if this is a registered student
+    const generatedCodes = JSON.parse(localStorage.getItem('generatedCodes') || '[]');
+    const student = generatedCodes.find((c: any) => c.code === code.toLowerCase());
+    
+    if (!student) {
+      return false;
+    }
+
+    const email = code.toLowerCase();
+    setAccessCode(email);
+    setStudentName(student.studentName);
+    localStorage.setItem('studentName', student.studentName);
+
+    // Load existing progress for this student
+    const savedProgress = localStorage.getItem(`progress_${email}`);
     if (savedProgress) {
       setUserProgress(JSON.parse(savedProgress));
+    } else {
+      setUserProgress([]);
     }
+
+    return true;
   };
 
   const logout = () => {
     setAccessCode(null);
+    setStudentName(null);
     setUserProgress([]);
     localStorage.removeItem('accessCode');
+    localStorage.removeItem('studentName');
   };
 
   const updateProgress = (weekId: number, updatedWeek: Week) => {
@@ -64,7 +100,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ accessCode, userProgress, login, logout, updateProgress }}>
+    <AuthContext.Provider value={{ 
+      accessCode, 
+      userProgress, 
+      login, 
+      logout, 
+      updateProgress,
+      studentName 
+    }}>
       {children}
     </AuthContext.Provider>
   );

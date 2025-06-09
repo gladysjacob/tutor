@@ -1,35 +1,41 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Container,
   Box,
-  Typography,
   TextField,
   Button,
+  Typography,
   Paper,
+  Alert,
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 interface LoginProps {
-  onLogin: (code: string) => void;
+  onLogin: (code: string) => boolean;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  const [accessCode, setAccessCode] = useState('');
+  const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!accessCode.trim()) {
-      setError('Please enter an access code');
+    setError('');
+
+    if (!email.trim()) {
+      setError('Please enter your email address');
       return;
     }
+
+    const success = onLogin(email.trim());
     
-    // Here we'll validate the access code
-    // For now, we'll accept any non-empty code
-    // In a real application, you would validate against a backend
-    onLogin(accessCode.trim());
-    navigate('/');
+    if (success) {
+      navigate('/');
+    } else {
+      setError('Invalid email or unregistered student. Please check with your teacher.');
+    }
   };
 
   return (
@@ -57,20 +63,22 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             Algebra 2 Tutoring
           </Typography>
           <Typography variant="body1" align="center" color="textSecondary" paragraph>
-            Enter your access code to view your curriculum progress
+            Enter your student email to access your curriculum progress
           </Typography>
 
           <form onSubmit={handleSubmit} style={{ width: '100%' }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <TextField
                 fullWidth
-                label="Access Code"
+                label="Student Email"
                 variant="outlined"
-                value={accessCode}
-                onChange={(e) => setAccessCode(e.target.value)}
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 error={!!error}
                 helperText={error}
                 autoFocus
+                placeholder="Enter your email address"
               />
               <Button
                 type="submit"
