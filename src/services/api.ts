@@ -1,4 +1,5 @@
-const API_URL = 'http://localhost:5000/api';
+// Determine the API URL based on the environment
+const API_URL = 'https://algebratutor.onrender.com/api';  // Replace with your actual deployed backend URL
 
 export const api = {
   login: async (code: string) => {
@@ -70,4 +71,4 @@ export const api = {
       throw new Error('Failed to delete student');
     }
   },
-}; 
+};
