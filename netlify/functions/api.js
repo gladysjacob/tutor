@@ -83,37 +83,53 @@ exports.handler = async (event, context) => {
     // Login endpoint
     if (path === '/login' && method === 'POST') {
       const { code } = body;
+      
+      console.log('Login attempt with code:', code);
+      
+      try {
+        // Check for any user (teacher or student) with this email
+        const result = await pool.query(
+          `SELECT u.*, 
+                  json_agg(p.data) FILTER (WHERE p.data IS NOT NULL) as progress 
+           FROM users u 
+           LEFT JOIN progress p ON u.id = p.user_id 
+           WHERE u.email = $1 
+           GROUP BY u.id`,
+          [code.toLowerCase()]
+        );
 
-      // Check for any user (teacher or student) with this email
-      const result = await pool.query(
-        `SELECT u.*, 
-                json_agg(p.data) FILTER (WHERE p.data IS NOT NULL) as progress 
-         FROM users u 
-         LEFT JOIN progress p ON u.id = p.user_id 
-         WHERE u.email = $1 
-         GROUP BY u.id`,
-        [code.toLowerCase()]
-      );
+        console.log('Query result:', result.rows.length, 'rows found');
 
-      if (result.rows.length === 0) {
+        if (result.rows.length === 0) {
+          console.log('No user found for email:', code);
+          return {
+            statusCode: 401,
+            headers,
+            body: JSON.stringify({ error: 'Invalid email or unregistered user' })
+          };
+        }
+
+        const user = result.rows[0];
+        console.log('User found:', { role: user.role, name: user.name });
+        
         return {
-          statusCode: 401,
+          statusCode: 200,
           headers,
-          body: JSON.stringify({ error: 'Invalid email or unregistered user' })
+          body: JSON.stringify({
+            isTeacher: user.role === 'teacher',
+            name: user.name,
+            email: user.email,
+            progress: user.progress || []
+          })
         };
+      } catch (error) {
+        console.error('Login error details:', {
+          message: error.message,
+          code: error.code,
+          stack: error.stack
+        });
+        throw error;  // Re-throw to be caught by the main error handler
       }
-
-      const user = result.rows[0];
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          isTeacher: user.role === 'teacher',
-          name: user.name,
-          email: user.email,
-          progress: user.progress || []
-        })
-      };
     }
 
     // Register student endpoint
