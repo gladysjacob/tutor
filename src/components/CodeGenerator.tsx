@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
   Box,
@@ -17,76 +17,115 @@ import {
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useNavigate } from 'react-router-dom';
+import { api } from '../services/api';
 
-interface GeneratedCode {
-  code: string;
-  studentName: string;
-  studentEmail: string;
-  timestamp: number;
+interface Student {
+  name: string;
+  email: string;
+  registeredAt: string;
 }
 
 const CodeGenerator: React.FC = () => {
   const [studentName, setStudentName] = useState('');
   const [studentEmail, setStudentEmail] = useState('');
-  const [generatedCodes, setGeneratedCodes] = useState<GeneratedCode[]>(() => {
-    const saved = localStorage.getItem('generatedCodes');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [snackbar, setSnackbar] = useState({ open: false, message: '' });
+  const [students, setStudents] = useState<Student[]>([]);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' as 'info' | 'error' | 'success' });
   const navigate = useNavigate();
+
+  useEffect(() => {
+    loadStudents();
+  }, []);
+
+  const loadStudents = async () => {
+    try {
+      const loadedStudents = await api.getStudents();
+      setStudents(loadedStudents);
+    } catch (error) {
+      setSnackbar({
+        open: true,
+        message: 'Failed to load students',
+        severity: 'error'
+      });
+    }
+  };
 
   const validateEmail = (email: string) => {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return re.test(email);
   };
 
-  const generateCode = () => {
+  const handleRegister = async () => {
     if (!studentName.trim()) {
-      setSnackbar({ open: true, message: 'Please enter a student name' });
+      setSnackbar({
+        open: true,
+        message: 'Please enter a student name',
+        severity: 'error'
+      });
       return;
     }
 
     if (!studentEmail.trim()) {
-      setSnackbar({ open: true, message: 'Please enter a student email' });
+      setSnackbar({
+        open: true,
+        message: 'Please enter a student email',
+        severity: 'error'
+      });
       return;
     }
 
     if (!validateEmail(studentEmail)) {
-      setSnackbar({ open: true, message: 'Please enter a valid email address' });
+      setSnackbar({
+        open: true,
+        message: 'Please enter a valid email address',
+        severity: 'error'
+      });
       return;
     }
 
-    // Check if email is already used
-    if (generatedCodes.some(code => code.code === studentEmail)) {
-      setSnackbar({ open: true, message: 'This email is already registered' });
-      return;
+    try {
+      await api.registerStudent(studentName.trim(), studentEmail.toLowerCase());
+      await loadStudents();
+      setStudentName('');
+      setStudentEmail('');
+      setSnackbar({
+        open: true,
+        message: 'Student registered successfully',
+        severity: 'success'
+      });
+    } catch (error) {
+      setSnackbar({
+        open: true,
+        message: error instanceof Error ? error.message : 'Failed to register student',
+        severity: 'error'
+      });
     }
-
-    const newCode: GeneratedCode = {
-      code: studentEmail.toLowerCase(),
-      studentName: studentName.trim(),
-      studentEmail: studentEmail.toLowerCase(),
-      timestamp: Date.now(),
-    };
-
-    const updatedCodes = [...generatedCodes, newCode];
-    setGeneratedCodes(updatedCodes);
-    localStorage.setItem('generatedCodes', JSON.stringify(updatedCodes));
-    setStudentName('');
-    setStudentEmail('');
-    setSnackbar({ open: true, message: 'Access code generated successfully' });
   };
 
-  const copyCode = (code: string) => {
-    navigator.clipboard.writeText(code);
-    setSnackbar({ open: true, message: 'Code copied to clipboard' });
+  const copyEmail = (email: string) => {
+    navigator.clipboard.writeText(email);
+    setSnackbar({
+      open: true,
+      message: 'Email copied to clipboard',
+      severity: 'success'
+    });
   };
 
-  const deleteCode = (timestamp: number) => {
-    const updatedCodes = generatedCodes.filter(code => code.timestamp !== timestamp);
-    setGeneratedCodes(updatedCodes);
-    localStorage.setItem('generatedCodes', JSON.stringify(updatedCodes));
-    setSnackbar({ open: true, message: 'Code deleted successfully' });
+  const handleDelete = async (email: string) => {
+    try {
+      await api.deleteStudent(email);
+      await loadStudents();
+      setSnackbar({
+        open: true,
+        message: 'Student deleted successfully',
+        severity: 'success'
+      });
+    } catch (error) {
+      setSnackbar({
+        open: true,
+        message: 'Failed to delete student',
+        severity: 'error'
+      });
+    }
   };
 
   return (
@@ -124,7 +163,7 @@ const CodeGenerator: React.FC = () => {
           />
           <Button
             variant="contained"
-            onClick={generateCode}
+            onClick={handleRegister}
             sx={{ minWidth: '200px' }}
           >
             Register Student
@@ -137,7 +176,7 @@ const CodeGenerator: React.FC = () => {
           Registered Students
         </Typography>
         <List>
-          {generatedCodes.length === 0 ? (
+          {students.length === 0 ? (
             <ListItem>
               <ListItemText
                 primary="No students registered yet"
@@ -145,8 +184,8 @@ const CodeGenerator: React.FC = () => {
               />
             </ListItem>
           ) : (
-            generatedCodes.map((item, index) => (
-              <React.Fragment key={item.timestamp}>
+            students.map((student, index) => (
+              <React.Fragment key={student.email}>
                 {index > 0 && <Divider />}
                 <ListItem
                   secondaryAction={
@@ -154,14 +193,14 @@ const CodeGenerator: React.FC = () => {
                       <IconButton
                         edge="end"
                         aria-label="copy"
-                        onClick={() => copyCode(item.code)}
+                        onClick={() => copyEmail(student.email)}
                       >
                         <ContentCopyIcon />
                       </IconButton>
                       <IconButton
                         edge="end"
                         aria-label="delete"
-                        onClick={() => deleteCode(item.timestamp)}
+                        onClick={() => handleDelete(student.email)}
                       >
                         <DeleteIcon />
                       </IconButton>
@@ -169,15 +208,15 @@ const CodeGenerator: React.FC = () => {
                   }
                 >
                   <ListItemText
-                    primary={item.studentName}
+                    primary={student.name}
                     secondary={
                       <>
                         <Typography component="span" variant="body2" color="text.primary">
-                          {item.studentEmail}
+                          {student.email}
                         </Typography>
                         <br />
                         <Typography component="span" variant="body2" color="text.secondary">
-                          Registered: {new Date(item.timestamp).toLocaleString()}
+                          Registered: {new Date(student.registeredAt).toLocaleString()}
                         </Typography>
                       </>
                     }
@@ -196,7 +235,7 @@ const CodeGenerator: React.FC = () => {
       >
         <Alert
           onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity="info"
+          severity={snackbar.severity}
           sx={{ width: '100%' }}
         >
           {snackbar.message}

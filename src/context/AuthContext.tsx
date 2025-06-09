@@ -1,13 +1,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Week } from '../types/curriculum';
+import { api } from '../services/api';
 
 interface AuthContextType {
   accessCode: string | null;
   userProgress: Week[];
-  login: (code: string) => boolean;
+  login: (code: string) => Promise<boolean>;
   logout: () => void;
-  updateProgress: (weekId: number, updatedWeek: Week) => void;
+  updateProgress: (weekId: number, updatedWeek: Week) => Promise<void>;
   studentName: string | null;
+  isTeacher: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,82 +33,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return saved || null;
   });
 
+  const [isTeacher, setIsTeacher] = useState<boolean>(() => {
+    const saved = localStorage.getItem('isTeacher');
+    return saved === 'true';
+  });
+
   const [userProgress, setUserProgress] = useState<Week[]>(() => {
     if (!accessCode) return [];
     const saved = localStorage.getItem(`progress_${accessCode}`);
     return saved ? JSON.parse(saved) : [];
   });
 
-  useEffect(() => {
-    if (accessCode) {
-      localStorage.setItem('accessCode', accessCode);
-      localStorage.setItem(`progress_${accessCode}`, JSON.stringify(userProgress));
-    }
-  }, [accessCode, userProgress]);
+  const login = async (code: string): Promise<boolean> => {
+    try {
+      const response = await api.login(code);
+      
+      setAccessCode(response.email);
+      setStudentName(response.name);
+      setIsTeacher(response.isTeacher);
+      
+      localStorage.setItem('accessCode', response.email);
+      localStorage.setItem('studentName', response.name);
+      localStorage.setItem('isTeacher', response.isTeacher.toString());
 
-  const validateEmail = (email: string) => {
-    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return re.test(email);
-  };
+      if (!response.isTeacher && response.progress) {
+        setUserProgress(response.progress);
+        localStorage.setItem(`progress_${response.email}`, JSON.stringify(response.progress));
+      }
 
-  const login = (code: string) => {
-    // Check if this is the teacher code
-    if (code === 'TEACHER-2024') {
-      setAccessCode(code);
-      setStudentName('Teacher');
-      localStorage.setItem('accessCode', code);
-      localStorage.setItem('studentName', 'Teacher');
       return true;
-    }
-
-    // Validate that the code is an email
-    if (!validateEmail(code)) {
+    } catch (error) {
+      console.error('Login failed:', error);
       return false;
     }
-
-    // Check if this is a registered student
-    const generatedCodes = JSON.parse(localStorage.getItem('generatedCodes') || '[]');
-    const student = generatedCodes.find((c: any) => c.code === code.toLowerCase());
-    
-    if (!student) {
-      return false;
-    }
-
-    const email = code.toLowerCase();
-    setAccessCode(email);
-    setStudentName(student.studentName);
-    localStorage.setItem('accessCode', email);
-    localStorage.setItem('studentName', student.studentName);
-
-    // Load existing progress for this student
-    const savedProgress = localStorage.getItem(`progress_${email}`);
-    if (savedProgress) {
-      setUserProgress(JSON.parse(savedProgress));
-    } else {
-      setUserProgress([]);
-    }
-
-    return true;
   };
 
   const logout = () => {
     setAccessCode(null);
     setStudentName(null);
+    setIsTeacher(false);
     setUserProgress([]);
     localStorage.removeItem('accessCode');
     localStorage.removeItem('studentName');
+    localStorage.removeItem('isTeacher');
   };
 
-  const updateProgress = (weekId: number, updatedWeek: Week) => {
-    setUserProgress(prev => {
-      const newProgress = prev.map(week => 
-        week.id === weekId ? updatedWeek : week
-      );
-      if (!prev.find(w => w.id === weekId)) {
-        newProgress.push(updatedWeek);
-      }
-      return newProgress;
-    });
+  const updateProgress = async (weekId: number, updatedWeek: Week) => {
+    if (!accessCode || isTeacher) return;
+
+    try {
+      const updatedProgress = await api.updateProgress(accessCode, weekId, updatedWeek);
+      setUserProgress(updatedProgress);
+      localStorage.setItem(`progress_${accessCode}`, JSON.stringify(updatedProgress));
+    } catch (error) {
+      console.error('Failed to update progress:', error);
+    }
   };
 
   return (
@@ -116,7 +97,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       login, 
       logout, 
       updateProgress,
-      studentName 
+      studentName,
+      isTeacher
     }}>
       {children}
     </AuthContext.Provider>

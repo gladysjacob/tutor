@@ -12,7 +12,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 interface LoginProps {
-  onLogin: (code: string) => boolean;
+  onLogin: (code: string) => Promise<boolean>;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
@@ -20,7 +20,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -29,7 +29,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       return;
     }
 
-    const success = onLogin(email.trim());
+    const success = await onLogin(email.trim());
     
     if (success) {
       navigate('/');
