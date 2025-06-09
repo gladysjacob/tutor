@@ -1,5 +1,6 @@
 // Determine the API URL based on the environment
 const API_URL = '/.netlify/functions/api';  // Using Netlify Functions
+console.log('API URL:', API_URL); // Debug log
 
 export const api = {
   login: async (code: string) => {
