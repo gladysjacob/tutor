@@ -22,6 +22,36 @@ async function getPool() {
   return pool;
 }
 
+async function verifyDatabaseState() {
+  const pool = await getPool();
+  try {
+    // Check tables exist
+    const tablesResult = await pool.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public'
+    `);
+    console.log('Existing tables:', tablesResult.rows);
+
+    // Check users table structure
+    const usersResult = await pool.query(`
+      SELECT column_name, data_type 
+      FROM information_schema.columns 
+      WHERE table_name = 'users'
+    `);
+    console.log('Users table structure:', usersResult.rows);
+
+    // Check all users
+    const users = await pool.query('SELECT * FROM users');
+    console.log('All users in database:', users.rows);
+    
+    return true;
+  } catch (err) {
+    console.error('Database verification failed:', err);
+    return false;
+  }
+}
+
 // Initialize database tables
 async function initializeDatabase() {
   if (isInitialized) {
@@ -64,13 +94,20 @@ async function initializeDatabase() {
       ['TEACHER-2024']
     );
 
+    console.log('Checking for teacher account:', teacherResult.rows.length ? 'found' : 'not found');
+
     if (teacherResult.rows.length === 0) {
-      await pool.query(
-        'INSERT INTO users (name, email, role) VALUES ($1, $2, $3)',
+      const insertResult = await pool.query(
+        'INSERT INTO users (name, email, role) VALUES ($1, $2, $3) RETURNING *',
         ['Teacher', 'TEACHER-2024', 'teacher']
       );
-      console.log('Teacher account created');
+      console.log('Teacher account created:', insertResult.rows[0]);
+    } else {
+      console.log('Existing teacher account:', teacherResult.rows[0]);
     }
+
+    // Verify database state
+    await verifyDatabaseState();
 
     console.log('Database initialization complete');
     isInitialized = true;
@@ -148,6 +185,12 @@ exports.handler = async (event, context) => {
         'SELECT * FROM users WHERE email = $1',
         [code.toLowerCase()]
       );
+
+      console.log('Login query result:', {
+        found: userResult.rows.length > 0,
+        email: code.toLowerCase(),
+        user: userResult.rows[0] || null
+      });
 
       if (userResult.rows.length === 0) {
         return {
