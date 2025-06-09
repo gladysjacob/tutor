@@ -1,5 +1,8 @@
 const { Pool } = require('pg');
 
+console.log('Attempting to connect to database...');
+console.log('Database URL exists:', !!process.env.NETLIFY_DATABASE_URL);
+
 // Initialize the PostgreSQL connection pool
 const pool = new Pool({
   connectionString: process.env.NETLIFY_DATABASE_URL,
@@ -8,9 +11,20 @@ const pool = new Pool({
   }
 });
 
+// Test the connection immediately
+pool.query('SELECT NOW()', (err, res) => {
+  if (err) {
+    console.error('Database connection test failed:', err);
+  } else {
+    console.log('Database connection test successful');
+  }
+});
+
 // Initialize database tables
 async function initializeDatabase() {
   try {
+    console.log('Starting database initialization...');
+    
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -252,11 +266,21 @@ exports.handler = async (event, context) => {
     };
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      stack: error.stack,
+      path: path,
+      method: method
+    });
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: 'Server error' })
+      body: JSON.stringify({ 
+        error: 'Server error',
+        details: error.message,
+        code: error.code
+      })
     };
   }
 }; 
