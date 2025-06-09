@@ -21,8 +21,8 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/algebra2t
 app.post('/api/login', async (req, res) => {
   const { code } = req.body;
 
-  // Check for teacher access code
-  if (code === process.env.TEACHER_ACCESS_CODE || code === 'TEACHER-2024') {
+  // Check for teacher access code first
+  if (code === 'TEACHER-2024') {
     return res.json({
       isTeacher: true,
       name: 'Teacher',
@@ -31,6 +31,7 @@ app.post('/api/login', async (req, res) => {
   }
 
   try {
+    // Only validate email for student logins
     const student = await Student.findOne({ email: code.toLowerCase() });
     if (!student) {
       return res.status(401).json({ error: 'Invalid email or unregistered student' });

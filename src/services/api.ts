@@ -11,7 +11,8 @@ export const api = {
     });
     
     if (!response.ok) {
-      throw new Error('Login failed');
+      const error = await response.json();
+      throw new Error(error.error || 'Login failed');
     }
     
     return response.json();

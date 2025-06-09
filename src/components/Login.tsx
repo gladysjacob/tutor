@@ -25,16 +25,21 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setError('');
 
     if (!email.trim()) {
-      setError('Please enter your email address');
+      setError('Please enter your email address or teacher code');
       return;
     }
 
-    const success = await onLogin(email.trim());
-    
-    if (success) {
-      navigate('/');
-    } else {
-      setError('Invalid email or unregistered student. Please check with your teacher.');
+    try {
+      const success = await onLogin(email.trim());
+      if (success) {
+        navigate('/');
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError('Login failed. Please try again.');
+      }
     }
   };
 
