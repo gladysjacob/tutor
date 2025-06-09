@@ -185,30 +185,34 @@ exports.handler = async (event, context) => {
       const { code } = body;
       console.log('Login attempt with code:', code);
 
-      // Debug: Show exact SQL being executed
-      const sql = 'SELECT * FROM users WHERE LOWER(email) = LOWER($1)';
-      const values = [code];
-      console.log('Executing SQL:', { sql, values });
+      // First get all users to debug
+      const allUsers = await pool.query('SELECT * FROM users');
+      console.log('Current users in database:', allUsers.rows);
 
-      // Query for user
-      const userResult = await pool.query(sql, values);
-      
+      // Case-insensitive query
+      const userResult = await pool.query(
+        'SELECT * FROM users WHERE email ILIKE $1',
+        [code]
+      );
+
       console.log('Login query result:', {
         found: userResult.rows.length > 0,
         rowCount: userResult.rowCount,
-        email: code,
+        searchedFor: code,
         user: userResult.rows[0] || null
       });
 
       if (userResult.rows.length === 0) {
-        // Debug: Check all users in the system
-        const allUsers = await pool.query('SELECT * FROM users');
-        console.log('All users in system:', allUsers.rows);
-        
         return {
           statusCode: 401,
           headers,
-          body: JSON.stringify({ error: 'Invalid email or unregistered user' })
+          body: JSON.stringify({ 
+            error: 'Invalid email or unregistered user',
+            debug: {
+              searchedFor: code,
+              availableUsers: allUsers.rows.map(u => u.email)
+            }
+          })
         };
       }
 
